@@ -370,14 +370,14 @@ class KeyOriginInfo(object):
         r += struct.pack("<" + "I" * len(self.path), *self.path)
         return r
 
-    def _path_string(self) -> str:
+    def _path_string(self, hardened_char: str = "h") -> str:
         s = ""
         for i in self.path:
             hardened = is_hardened(i)
             i &= ~HARDENED_FLAG
             s += "/" + str(i)
             if hardened:
-                s += "h"
+                s += hardened_char
         return s
 
     def to_string(self) -> str:
@@ -404,11 +404,11 @@ class KeyOriginInfo(object):
             path = parse_path(s[9:])
         return cls(fingerprint, path)
 
-    def get_derivation_path(self) -> str:
+    def get_derivation_path(self, hardened_char: str = "h") -> str:
         """
         Return the string for just the path
         """
-        return "m" + self._path_string()
+        return "m" + self._path_string(hardened_char)
 
     def get_full_int_list(self) -> List[int]:
         """

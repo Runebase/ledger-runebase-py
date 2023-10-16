@@ -37,6 +37,7 @@ class BitcoinInsType(enum.IntEnum):
     SIGN_PSBT = 0x04
     GET_MASTER_FINGERPRINT = 0x05
     SIGN_MESSAGE = 0x10
+    SIGN_SENDER_PSBT = 0x81
 
 class FrameworkInsType(enum.IntEnum):
     CONTINUE_INTERRUPTED = 0x01
@@ -162,6 +163,49 @@ class BitcoinCommandBuilder:
 
         return self.serialize(
             cla=self.CLA_BITCOIN, ins=BitcoinInsType.SIGN_PSBT, cdata=bytes(cdata)
+        )
+
+    def sign_sender_psbt(
+            self,
+            bip32_path: str,
+            global_mapping: Mapping[bytes, bytes],
+            input_mappings: List[Mapping[bytes, bytes]],
+            output_mappings: List[Mapping[bytes, bytes]],
+            wallet: WalletPolicy,
+            wallet_hmac: Optional[bytes],
+    ):
+
+        cdata = bytearray()
+
+        # serialize the bip32 path for the sender
+        bip32_path: List[bytes] = bip32_path_from_string(bip32_path)
+
+        cdata += len(bip32_path).to_bytes(1, byteorder="big")
+        cdata += b''.join(bip32_path)
+
+        cdata += get_merkleized_map_commitment(global_mapping)
+
+        cdata += write_varint(len(input_mappings))
+        cdata += MerkleTree(
+            [
+                element_hash(get_merkleized_map_commitment(m_in))
+                for m_in in input_mappings
+            ]
+        ).root
+
+        cdata += write_varint(len(output_mappings))
+        cdata += MerkleTree(
+            [
+                element_hash(get_merkleized_map_commitment(m_out))
+                for m_out in output_mappings
+            ]
+        ).root
+
+        cdata += wallet.id
+        cdata += wallet_hmac if wallet_hmac is not None else b'\0' * 32
+
+        return self.serialize(
+            cla=self.CLA_BITCOIN, ins=BitcoinInsType.SIGN_SENDER_PSBT, cdata=bytes(cdata)
         )
 
     def get_master_fingerprint(self):

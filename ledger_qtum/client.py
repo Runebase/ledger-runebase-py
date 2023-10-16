@@ -245,6 +245,89 @@ class NewClient(Client):
 
         return results_list
 
+    def sign_sender_psbt(self, psbt: Union[PSBT, bytes, str], bip32_path: str, wallet: WalletPolicy, wallet_hmac: Optional[bytes]) -> List[Tuple[int, PartialSignature]]:
+        psbt = normalize_psbt(psbt)
+
+        if psbt.version != 2:
+            if self._no_clone_psbt:
+                psbt.convert_to_v2()
+                psbt_v2 = psbt
+            else:
+                psbt_v2 = PSBT()
+                psbt_v2.deserialize(psbt.serialize())  # clone psbt
+                psbt_v2.convert_to_v2()
+        else:
+            psbt_v2 = psbt
+
+        psbt_bytes = base64.b64decode(psbt_v2.serialize())
+        f = BytesIO(psbt_bytes)
+
+        # We parse the individual maps (global map, each input map, and each output map) from the psbt serialized as a
+        # sequence of bytes, in order to produce the serialized Merkleized map commitments. Moreover, we prepare the
+        # client interpreter to respond on queries on all the relevant Merkle trees and pre-images in the psbt.
+
+        assert f.read(5) == b"psbt\xff"
+
+        client_intepreter = ClientCommandInterpreter()
+        client_intepreter.add_known_list([k.encode() for k in wallet.keys_info])
+        client_intepreter.add_known_preimage(wallet.serialize())
+
+        # necessary for version 1 of the protocol (introduced in version 2.1.0)
+        client_intepreter.add_known_preimage(wallet.descriptor_template.encode())
+
+        global_map: Mapping[bytes, bytes] = parse_stream_to_map(f)
+        client_intepreter.add_known_mapping(global_map)
+
+        input_maps: List[Mapping[bytes, bytes]] = []
+        for _ in range(len(psbt_v2.inputs)):
+            input_maps.append(parse_stream_to_map(f))
+        for m in input_maps:
+            client_intepreter.add_known_mapping(m)
+
+        output_maps: List[Mapping[bytes, bytes]] = []
+        for _ in range(len(psbt_v2.outputs)):
+            output_maps.append(parse_stream_to_map(f))
+        for m in output_maps:
+            client_intepreter.add_known_mapping(m)
+
+        # We also add the Merkle tree of the input (resp. output) map commitments as a known tree
+        input_commitments = [get_merkleized_map_commitment(m_in) for m_in in input_maps]
+        output_commitments = [get_merkleized_map_commitment(m_out) for m_out in output_maps]
+
+        client_intepreter.add_known_list(input_commitments)
+        client_intepreter.add_known_list(output_commitments)
+
+        sw, _ = self._make_request(
+            self.builder.sign_sender_psbt(
+                bip32_path, global_map, input_maps, output_maps, wallet, wallet_hmac
+            ),
+            client_intepreter,
+        )
+
+        if sw != 0x9000:
+            raise DeviceException(error_code=sw, ins=BitcoinInsType.SIGN_PSBT)
+
+        # parse results and return a structured version instead
+        results = client_intepreter.yielded
+
+        if any(len(x) <= 1 for x in results):
+            raise RuntimeError("Invalid response")
+
+        results_list: List[Tuple[int, PartialSignature]] = []
+        for res in results:
+            res_buffer = BytesIO(res)
+            output_index = read_varint(res_buffer)
+
+            pubkey_augm_len = read_uint(res_buffer, 8)
+            pubkey_augm = res_buffer.read(pubkey_augm_len)
+
+            signature = res_buffer.read()
+
+            results_list.append((output_index, _make_partial_signature(pubkey_augm, signature)))
+
+        return results_list
+
+
     def get_master_fingerprint(self) -> bytes:
         sw, response = self._make_request(self.builder.get_master_fingerprint())
 
