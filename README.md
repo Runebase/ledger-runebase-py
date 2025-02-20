@@ -1,8 +1,8 @@
-# Ledger Qtum application client
+# Ledger Runebase application client
 
 ## Overview
 
-Client library for Ledger Qtum application.
+Client library for Ledger Runebase application.
 
 Main repository and documentation: https://github.com/LedgerHQ/app-bitcoin-new
 
@@ -11,13 +11,13 @@ Main repository and documentation: https://github.com/LedgerHQ/app-bitcoin-new
 If you just want to communicate through TCP socket (for example with the Speculos emulator), there is no dependency:
 
 ```bash
-$ pip install ledger_qtum
+$ pip install ledger_runebase
 ```
 
 otherwise, [hidapi](https://github.com/trezor/cython-hidapi) must be installed as an extra dependency:
 
 ```bash
-$ pip install ledger_qtum[hid]
+$ pip install ledger_runebase[hid]
 ```
 
 ## Getting started
@@ -35,12 +35,12 @@ It is possible to run the app and the library with the [speculos](https://github
 ⚠️ Currently, speculos does not correctly emulate the version of the app, always returning a dummy value; in order to use the library, it is necessary to set the `SPECULOS_APPNAME` environment variable before starting speculos, for example with:
 
 ```
-$ export SPECULOS_APPNAME="Qtum Test:2.1.0"
+$ export SPECULOS_APPNAME="Runebase Test:2.1.0"
 ```
 
 Similarly, to test the library behavior on a legacy version of the app, one can set the version to `1.6.5` (the final version of the 1.X series).
 
-The expected application name is `Qtum` for mainnet, `Qtum Test` for testnet.
+The expected application name is `Runebase` for mainnet, `Runebase Test` for testnet.
 
 ### Example
 
@@ -53,8 +53,8 @@ Testing the `sign_psbt` method requires producing a valid PSBT (with any externa
 
 ```python
 from typing import Optional
-from ledger_qtum import createClient, Chain, MultisigWallet, MultisigWallet, WalletPolicy, AddressType, TransportClient
-from ledger_qtum.psbt import PSBT
+from ledger_runebase import createClient, Chain, MultisigWallet, MultisigWallet, WalletPolicy, AddressType, TransportClient
+from ledger_runebase.psbt import PSBT
 
 
 def main():
